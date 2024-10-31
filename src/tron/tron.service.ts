@@ -82,20 +82,7 @@ export class TronService {
   async getVerifiedTokens(): Promise<any[]> {
     const cachedResponse = await this.cacheManager.get('verified_tokens');
     if (!cachedResponse) {
-      const response = await this.tronscanApi.get('/tokens/overview?start=0&limit=100&showAll=0&filter=trc20&sort=marketcap');
-      const restTokens = response.data.tokens;
       let tokens = [];
-
-      for (let i = 0; i < restTokens.length; i++) {
-        tokens.push({
-          name: restTokens[i].name,
-          abbr: restTokens[i].abbr,
-          contractAddress: restTokens[i].contractAddress,
-          decimals: restTokens[i].decimal,
-          iconUrl: restTokens[i].imgUrl,
-          priceInUsd: restTokens[i].priceInUsd ?? 0
-        });
-      }
 
       const tronToken = await this.tronscanApi.get('/tokens/overview?start=0&limit=10&showAll=0&filter=top&sort=marketcap');
       const tron = tronToken.data.tokens.find(t => t.contractAddress == "_");
@@ -108,6 +95,20 @@ export class TronService {
           decimals: tron.decimal,
           iconUrl: tron.imgUrl,
           priceInUsd: tron.priceInUsd
+        });
+      }
+
+      const response = await this.tronscanApi.get('/tokens/overview?start=0&limit=100&showAll=0&filter=trc20&sort=marketcap');
+      const restTokens = response.data.tokens;
+
+      for (let i = 0; i < restTokens.length; i++) {
+        tokens.push({
+          name: restTokens[i].name,
+          abbr: restTokens[i].abbr,
+          contractAddress: restTokens[i].contractAddress,
+          decimals: restTokens[i].decimal,
+          iconUrl: restTokens[i].imgUrl,
+          priceInUsd: restTokens[i].priceInUsd ?? 0
         });
       }
 
