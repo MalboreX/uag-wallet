@@ -85,6 +85,7 @@ export class TronService {
       const response = await this.tronscanApi.get('/tokens/overview?start=0&limit=100&showAll=0&filter=trc20&sort=marketcap');
       const restTokens = response.data.tokens;
       let tokens = [];
+
       for (let i = 0; i < restTokens.length; i++) {
         tokens.push({
           name: restTokens[i].name,
@@ -92,7 +93,7 @@ export class TronService {
           contractAddress: restTokens[i].contractAddress,
           decimals: restTokens[i].decimal,
           iconUrl: restTokens[i].imgUrl,
-          priceInUsd: restTokens[i].priceInUsd
+          priceInUsd: restTokens[i].priceInUsd ?? 0
         });
       }
 
@@ -110,8 +111,8 @@ export class TronService {
         });
       }
 
-
-      await this.cacheManager.set('verified_tokens', tokens, 1000 * 60);
+      if (tokens.length > 1)
+        await this.cacheManager.set('verified_tokens', tokens, 1000 * 60);
 
       return tokens;
     } else return cachedResponse as [];
