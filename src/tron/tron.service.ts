@@ -43,22 +43,36 @@ export class TronService {
   }
 
   async validateAccount(mnemonics: string) {
+    mnemonics = mnemonics.trim();
+    const isMnemonic = mnemonics.split(' ').length >= 12;
+    if (isMnemonic) {
+      const seed = bip39.mnemonicToSeedSync(mnemonics);
+      const root = bip32.fromSeed(seed);
+      const child = root.derivePath("m/44'/195'/0'/0/0");
 
-    const seed = bip39.mnemonicToSeedSync(mnemonics);
-    const root = bip32.fromSeed(seed);
-    const child = root.derivePath("m/44'/195'/0'/0/0");
+      const privateKey = this.uint8ArrayToHexString(child.privateKey);
+      const publicKey = this.uint8ArrayToHexString(child.publicKey);
+      const address = this.tronWeb.address.fromPrivateKey(privateKey.replace('0x', ''));
 
-    const privateKey = this.uint8ArrayToHexString(child.privateKey);
-    const publicKey = this.uint8ArrayToHexString(child.publicKey);
-    const address = this.tronWeb.address.fromPrivateKey(privateKey.replace('0x', ''));
+      return {
+        address: address,
+        publicKey: publicKey,
+        privateKey: privateKey,
+        mnemonics: mnemonics
+      };
+    } else {
+      const privateKey = mnemonics;
+      const address = this.tronWeb.address.fromPrivateKey(privateKey.replace('0x', ''));
 
-    return {
-      address: address,
-      publicKey: publicKey,
-      privateKey: privateKey,
-      mnemonics: mnemonics
-    };
+      return {
+        address: address,
+        publicKey: '',
+        privateKey: privateKey,
+        mnemonics: privateKey,
+      };
+    }
   }
+
 
   uint8ArrayToHexString(uint8Array) {
     const hexArray = Array.from(uint8Array, (byte: number) => byte.toString(16).padStart(2, '0'));
