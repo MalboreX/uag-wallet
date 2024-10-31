@@ -337,16 +337,6 @@ export class TronService {
     this.tronWeb.setAddress(from);
     this.tronWeb.setPrivateKey(privateKey);
 
-    // const contract = await this.tronWeb.contract().at(contractAddress);
-    // const decimals = await contract.decimals().call();
-    // const tokenAmount = parseFloat(amount) * 10 ** decimals;
-
-    // const functionSelector = 'transfer(address,uint256)';
-    // const parameter = [{ type: 'address', value: to }, { type: 'uint256', value: tokenAmount }]
-    // const tx = await this.tronWeb.transactionBuilder.triggerSmartContract(contractAddress, functionSelector, {}, parameter);
-    // const signedTx = await this.tronWeb.trx.sign(tx.transaction);
-    // const result = await this.tronWeb.trx.sendRawTransaction(signedTx);
-    // console.log(result);
     const contract = await this.tronWeb.contract().at(contractAddress);
     const decimals = await contract.decimals().call();
     const tokenAmount = parseFloat(amount) * 10 ** decimals;
@@ -369,7 +359,9 @@ export class TronService {
     this.tronWeb.setAddress(from);
     this.tronWeb.setPrivateKey(privateKey);
 
-    const hash = await this.tronWeb.trx.sendTransaction(to, amount);
+    const tokenAmount = parseFloat(amount) * 10 ** 6;
+
+    const hash = await this.tronWeb.trx.sendTransaction(to, tokenAmount);
     return {
       success: true,
       hash
