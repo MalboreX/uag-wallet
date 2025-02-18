@@ -33,7 +33,7 @@ export class TronController {
 
   @Get('transactions')
   async transactionsList(@Query() query) {
-    return await this.tronService.queryListTransactions(query.walletAddress);
+    return await this.tronService.queryListTransactions(query.walletAddress, query.limit, query.fingerprint);
   }
 
   @Get('transaction')

@@ -73,7 +73,6 @@ export class TronService {
     }
   }
 
-
   uint8ArrayToHexString(uint8Array) {
     const hexArray = Array.from(uint8Array, (byte: number) => byte.toString(16).padStart(2, '0'));
     return '0x' + hexArray.join('');
@@ -121,8 +120,6 @@ export class TronService {
 
   async queryWalletDetails(walletAddress: string, contracts: string[]) {
     try {
-      //const cachedResponse = await this.cacheManager.get(`queryWalletDetails_${walletAddress}`);
-      //if (!true) {
       const rouble = await this.queryRouble();
       const queryTokensData = await this.tronscanApi.get(`/account/wallet?address=${walletAddress}&asset_type=0`);
       const tokensInWallet = queryTokensData.data.data;
@@ -171,11 +168,7 @@ export class TronService {
         }
       }
 
-      //await this.cacheManager.set(`queryWalletDetails_${walletAddress}`, result, 3 * 1000);
-
       return result;
-      //} else return cachedResponse;
-
     } catch (error) {
       console.error(error);
     }
@@ -236,67 +229,95 @@ export class TronService {
     return transaction;
   }
 
-  async queryListTransactions(walletAddress: string) {
-    const maxTransactionCount = 2000;
+  async queryListTransactions(walletAddress: string, limit: number = 1, fingerprint: string) {
 
-    let trxTransactions = [];
-    let fingerprint = null;
+    await this.tronWeb.setAddress(walletAddress);
 
-    while (true) {
-      try {
-        const response = await this.tronGrid.account.getTransactions(walletAddress, {
-          limit: 200,
-          onlyConfirmed: true,
-          orderBy: 'timestamp,desc',
-          fingerprint: fingerprint
-        });
+    const transactions = [];
 
-        const transactions = response.data;
-        transactions.forEach(x => console.log(x.raw_data?.contract[0]?.type));
-        if (transactions.length == 0) break;
+    const options = {
+      onlyConfirmed: true,
+      limit,
+      orderBy: 'timestamp,desc',
+      fingerprint,
+    };
 
-        trxTransactions.push(...transactions.filter((x: any) => x.raw_data?.contract[0]?.type == 'TransferContract') as never[]);
+    const transactionsResponse = await this.tronGrid.account.getTransactions(walletAddress, options);
 
-        if (response.meta.fingerprint == null || trxTransactions.length >= maxTransactionCount) break;
+    const meta = transactionsResponse.meta;
 
-        fingerprint = response.meta.fingerprint;
-      } catch (error) {
-        console.error('Error fetching transactions:', error);
-        break;
+    for (let i = 0; i < transactionsResponse.data.length; i++) {
+
+      const event = transactionsResponse.data[i].raw_data.contract[0].type;
+
+      let amount = 0;
+      let isTrx = false;
+      let from_address = '';
+      let to_address = '';
+      let contract_address = null;
+      let contract_decimals = null;
+
+      if (event == 'TransferContract') {
+        isTrx = true;
+        amount = parseFloat(this.tronWeb.fromSun(transactionsResponse.data[i].raw_data.contract[0].parameter.value.amount));
+        to_address = this.tronWeb.address.fromHex(transactionsResponse.data[i].raw_data.contract[0].parameter.value.to_address);
+        from_address = this.tronWeb.address.fromHex(transactionsResponse.data[i].raw_data.contract[0].parameter.value.owner_address);
+      } else if (event == 'TriggerSmartContract') {
+        const call_data = transactionsResponse.data[i].raw_data.contract[0].parameter.value.data;
+        const parameters = this.parseTransactionData(call_data);
+
+        contract_address = this.tronWeb.address.fromHex(transactionsResponse.data[i].raw_data.contract[0].parameter.value.contract_address);
+        const contract = await this.tronWeb.contract().at(contract_address);
+        contract_decimals = await contract.decimals().call();
+        amount = parseFloat(parameters.value) / 10 ** contract_decimals;
+
+        from_address = walletAddress;
+        to_address = this.tronWeb.address.fromHex(parameters.address);
+      } else if (event == 'TransferAssetContract') {
+        to_address = this.tronWeb.address.fromHex(transactionsResponse.data[i].raw_data.contract[0].parameter.value.to_address);
+        from_address = this.tronWeb.address.fromHex(transactionsResponse.data[i].raw_data.contract[0].parameter.value.owner_address);
+        amount = parseFloat(this.tronWeb.fromSun(transactionsResponse.data[i].raw_data.contract[0].parameter.value.amount));
       }
+
+      transactions.push({
+        txID: transactionsResponse.data[i].txID,
+        status: transactionsResponse.data[i].ret[0].contractRet,
+        isTrx,
+        event,
+        amount,
+        from_address,
+        to_address,
+        contract_address,
+        contract_decimals
+      });
     }
 
-    trxTransactions.forEach(x => this.updateFields(x));
-    fingerprint = null;
-
-    let trc20Transactions = [];
-
-    while (true) {
-      try {
-        const response = await this.tronGrid.account.getTrc20Transactions(walletAddress, {
-          limit: 200,
-          onlyConfirmed: true,
-          orderBy: 'timestamp,desc',
-          fingerprint: fingerprint,
-          //min_timestamp: '1722271062000',
-        });
-
-        const transactions = response.data;
-        if (transactions.length == 0) break;
-
-        trc20Transactions.push(...transactions as never[]);
-
-        if (response.meta.fingerprint == null || trc20Transactions.length >= maxTransactionCount) break;
-
-        fingerprint = response.meta.fingerprint;
-      } catch (error) {
-        console.error('Error fetching transactions:', error);
-        break;
-      }
-    }
-
-    return [...trxTransactions, ...trc20Transactions];
+    return {
+      meta,
+      transactions
+    };
   }
+
+  parseTransactionData(data: string) {
+    if (data.startsWith('0x')) {
+      data = data.slice(2);
+    }
+
+    const functionSelector = data.slice(0, 8);
+
+    const addressHex = data.slice(8, 72);
+    const address = '0x' + addressHex.slice(24);
+
+    const valueHex = data.slice(72, 136);
+    const value = BigInt('0x' + valueHex.toString());
+
+    return {
+      functionSelector,
+      address,
+      value: value.toString()
+    };
+  }
+
 
   async updateFields(obj) {
     for (const key in obj) {
