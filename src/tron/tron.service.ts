@@ -120,10 +120,11 @@ export class TronService {
 
   async queryWalletDetails(walletAddress: string, contracts: string[]) {
     try {
+      await this.tronWeb.setAddress(walletAddress);
       const rouble = await this.queryRouble();
-      const queryTokensData = await this.tronscanApi.get(`/account/wallet?address=${walletAddress}&asset_type=0`);
-      const tokensInWallet = queryTokensData.data.data;
+
       const verifiedTokens = await this.getVerifiedTokens();
+
       const result = [];
       for (let contract of contracts) {
         const verifiedContractIndex = verifiedTokens.findIndex(x => x.contractAddress == contract);
@@ -131,9 +132,22 @@ export class TronService {
           const contractDetails = verifiedTokens[verifiedContractIndex];
           let balance = 0;
 
-          const tokenInWallet = tokensInWallet.find(x => x?.token_id == contract);
-          if (tokenInWallet)
-            balance = tokenInWallet.balance;
+          if (contract == '_') {
+            const trxBalance = await this.tronWeb.trx.getBalance(walletAddress);
+            balance = this.tronWeb.fromSun(trxBalance);
+          } else {
+            const contractInstance = await this.tronWeb
+              .contract()
+              .at(contract);
+
+            const trc20Balance = await contractInstance
+              .balanceOf(walletAddress)
+              .call();
+
+            const decimals = await contractInstance.decimals().call();
+
+            balance = trc20Balance.toNumber() / 10 ** decimals;
+          }
 
           result.push({
             name: contractDetails.name,
@@ -143,16 +157,24 @@ export class TronService {
             iconUrl: contractDetails.iconUrl,
             priceInUsd: parseFloat(contractDetails.priceInUsd),
             priceInRouble: parseFloat(contractDetails.priceInUsd) * rouble,
-            balance: balance,
+            balance: balance.toString(),
           });
 
         } else {
           const contractDetails = await this.queryContractInfo(contract);
           let balance = 0;
 
-          const tokenInWallet = tokensInWallet.find(x => x.token_id == contract);
-          if (tokenInWallet)
-            balance = tokenInWallet.balance;
+          const contractInstance = await this.tronWeb
+            .contract()
+            .at(contract);
+
+          const trc20Balance = await contractInstance
+            .balanceOf(walletAddress)
+            .call();
+
+          const decimals = await contractInstance.decimals().call();
+
+          balance = trc20Balance.toNumber() / 10 ** decimals;
 
           if (contractDetails) {
             result.push({
@@ -162,7 +184,7 @@ export class TronService {
               decimals: contractDetails.decimals,
               iconUrl: contractDetails.iconUrl,
               priceInUsd: 0,
-              balance: balance,
+              balance: balance.toString(),
             });
           }
         }
